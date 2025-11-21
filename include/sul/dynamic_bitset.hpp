@@ -1365,6 +1365,13 @@ namespace sul
         [[nodiscard]] constexpr size_type find_next(size_type prev) const;
 
         /**
+         * @brief Find the position of the last bit set in a continuous sequence of set bits starting from position @p pos.
+         * @param pos Position to start the search from.
+         * @return The position of the last bit set in the sequence, or npos if the bit at @p pos is 0, or @p pos is out of bounds.
+         */
+        [[nodiscard]] constexpr size_type find_sequence_end(size_type pos) const;
+
+        /**
          * @brief      Exchanges the bits of this @ref sul::dynamic_bitset with those of @p other.
          *
          * @details    All @ref reference on bits of the @ref sul::dynamic_bitset are invalidated.
@@ -2913,6 +2920,36 @@ namespace sul
             }
         }
         return npos;
+    }
+
+    template<typename Block, typename Allocator>
+    constexpr typename dynamic_bitset<Block, Allocator>::size_type
+    dynamic_bitset<Block, Allocator>::find_sequence_end(size_type pos) const {
+           if (pos >= m_bits_number) {
+                return npos;
+            }
+
+            if (!test(pos)) {
+                return npos;
+            }
+
+            const size_type firstBlock = block_index(pos);
+            const size_type firstBitIndex = bit_index(pos);
+            const block_type invertedShifted = static_cast<block_type>(~m_blocks[firstBlock] >> firstBitIndex);
+
+            if (invertedShifted != zero_block) {
+                return pos + count_block_trailing_zero(invertedShifted) - 1;
+            }
+
+            for (size_type i = firstBlock + 1; i < m_blocks.size(); ++i) {
+                const block_type currentBlock = m_blocks[i];
+
+                if (m_blocks[i] != one_block) {
+                    return i * bits_per_block + count_block_trailing_zero(static_cast<block_type>(~m_blocks[i])) - 1;
+                }
+            }
+
+            return m_bits_number - 1;
     }
 
     template<typename Block, typename Allocator>
