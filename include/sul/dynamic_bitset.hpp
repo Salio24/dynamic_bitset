@@ -1364,6 +1364,8 @@ namespace sul
          */
         [[nodiscard]] constexpr size_type find_next(size_type prev) const;
 
+        [[nodiscard]] constexpr size_type find_prev(size_type next) const;
+
         /**
          * @brief Find the position of the last bit set in a continuous sequence of set bits starting from position @p pos.
          * @param pos Position to start the search from.
@@ -2924,32 +2926,83 @@ namespace sul
 
     template<typename Block, typename Allocator>
     constexpr typename dynamic_bitset<Block, Allocator>::size_type
-    dynamic_bitset<Block, Allocator>::find_sequence_end(size_type pos) const {
-           if (pos >= m_bits_number) {
-                return npos;
+    dynamic_bitset<Block, Allocator>::find_prev(size_type next) const
+    {
+        if (next == 0 || empty())
+        {
+            return npos;
+        }
+
+        if (next > size())
+        {
+            next = size();
+        }
+
+        size_type bit = next - 1;
+        size_type blockIndex = block_index(bit);
+        size_type bitInBlock = bit_index(bit);
+
+        block_type block = m_blocks[blockIndex];
+
+        if (bitInBlock < block_last_bit_index)
+        {
+            block &= (block_type(1) << (bitInBlock + 1)) - 1;
+        }
+
+        while (true)
+        {
+            if (block != zero_block)
+            {
+                size_type bitPos = bits_per_block - 1 - std::countl_zero(block);
+                return blockIndex * bits_per_block + bitPos;
             }
 
-            if (!test(pos)) {
-                return npos;
+            if (blockIndex == 0)
+            {
+                break;
             }
 
-            const size_type firstBlock = block_index(pos);
-            const size_type firstBitIndex = bit_index(pos);
-            const block_type invertedShifted = static_cast<block_type>(~m_blocks[firstBlock] >> firstBitIndex);
+            --blockIndex;
+            block = m_blocks[blockIndex];
+        }
 
-            if (invertedShifted != zero_block) {
-                return pos + count_block_trailing_zero(invertedShifted) - 1;
+        return npos;
+    }
+
+    template<typename Block, typename Allocator>
+    constexpr typename dynamic_bitset<Block, Allocator>::size_type
+    dynamic_bitset<Block, Allocator>::find_sequence_end(size_type pos) const
+    {
+        if (pos >= m_bits_number)
+        {
+            return npos;
+        }
+
+        if (!test(pos))
+        {
+            return npos;
+        }
+
+        const size_type firstBlock = block_index(pos);
+        const size_type firstBitIndex = bit_index(pos);
+        const block_type invertedShifted = static_cast<block_type>(~m_blocks[firstBlock] >> firstBitIndex);
+
+        if (invertedShifted != zero_block)
+        {
+            return pos + count_block_trailing_zero(invertedShifted) - 1;
+        }
+
+        for (size_type i = firstBlock + 1; i < m_blocks.size(); ++i)
+        {
+            const block_type currentBlock = m_blocks[i];
+
+            if (m_blocks[i] != one_block)
+            {
+                return i * bits_per_block + count_block_trailing_zero(static_cast<block_type>(~m_blocks[i])) - 1;
             }
+        }
 
-            for (size_type i = firstBlock + 1; i < m_blocks.size(); ++i) {
-                const block_type currentBlock = m_blocks[i];
-
-                if (m_blocks[i] != one_block) {
-                    return i * bits_per_block + count_block_trailing_zero(static_cast<block_type>(~m_blocks[i])) - 1;
-                }
-            }
-
-            return m_bits_number - 1;
+        return m_bits_number - 1;
     }
 
     template<typename Block, typename Allocator>
